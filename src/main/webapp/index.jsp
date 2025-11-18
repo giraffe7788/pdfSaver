@@ -1,0 +1,423 @@
+<%@ page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" %>
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF 분할저장기</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+    <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .container-fluid {
+            height: 100vh;
+            padding: 20px;
+        }
+        .left-panel {
+            background-color: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        .right-panel {
+            background-color: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+        .upload-area {
+            border: 3px dashed #dee2e6;
+            border-radius: 10px;
+            padding: 60px 20px;
+            text-align: center;
+            width: 100%;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .upload-area:hover {
+            border-color: #0d6efd;
+            background-color: #f0f8ff;
+        }
+        .upload-icon {
+            font-size: 48px;
+            color: #6c757d;
+            margin-bottom: 20px;
+        }
+        .table-container {
+            flex-grow: 1;
+            overflow-y: auto;
+            margin-bottom: 20px;
+            max-height: 73vh;
+        }
+        .table thead {
+            position: sticky;
+            top: 0;
+            background-color: white;
+            z-index: 10;
+        }
+        .btn-remove {
+            padding: 2px 8px;
+            font-size: 12px;
+        }
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+        #fileName {
+            font-size: 14px;
+            color: #198754;
+            margin-top: 10px;
+        }
+        /* 로딩 오버레이 */
+        .loading-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            z-index: 9999;
+            justify-content: center;
+            align-items: center;
+        }
+        .loading-overlay.active {
+            display: flex;
+        }
+        .loading-content {
+            text-align: center;
+            color: white;
+        }
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 6px solid #f3f3f3;
+            border-top: 6px solid #0d6efd;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .loading-text {
+            font-size: 18px;
+            font-weight: bold;
+        }
+        .loading-subtext {
+            font-size: 14px;
+            color: #ddd;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row h-100 g-3">
+            <!-- 왼쪽 -->
+            <div class="col-md-5">
+                <div class="left-panel">
+                    <h3 class="mb-4">PDF 파일 업로드</h3>
+                    <div class="upload-area" onclick="document.getElementById('pdfFile').click()">
+                        <div class="upload-icon">📄</div>
+                        <h5>클릭하여 PDF 파일을 선택하세요</h5>
+                        <p class="text-muted">또는 파일을 여기로 드래그하세요</p>
+                        <input type="file" id="pdfFile" accept="application/pdf" style="display: none;">
+                    </div>
+                    <div id="fileName"></div>
+                </div>
+            </div>
+
+            <!-- 오른쪽 -->
+            <div class="col-md-7">
+                <div class="right-panel">
+                    <h3 class="mb-4">PDF 분할 설정</h3>
+
+                    <div class="table-container">
+                        <table class="table table-bordered table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width: 15%;">시작 페이지</th>
+                                    <th style="width: 15%;">끝 페이지</th>
+                                    <th style="width: 55%;">파일 제목</th>
+                                    <th style="width: 15%;">행삭제</th>
+                                </tr>
+                            </thead>
+                            <tbody id="pdfTable">
+                                <tr>
+                                    <td><input type="number" class="form-control form-control-sm" placeholder="페이지 입력" min="1"></td>
+                                    <td><input type="number" class="form-control form-control-sm" placeholder="페이지 입력" min="1"></td>
+                                    <td><input type="text" class="form-control form-control-sm" placeholder="파일명 입력"></td>
+                                    <td class="text-center">
+                                        <button class="btn btn-danger btn-sm btn-remove" onclick="removeRow(this)">삭제</button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="action-buttons">
+                        <button class="btn btn-success" onclick="addRow()">
+                            <i class="bi bi-plus-circle"></i> 행 추가
+                        </button>
+                        <button class="btn btn-primary" onclick="downloadPDFs()">
+                            <i class="bi bi-download"></i> 다운로드
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 로딩 오버레이 -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <div class="loading-text">PDF 처리 중...</div>
+            <div class="loading-subtext" id="loadingSubtext">잠시만 기다려주세요</div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
+    <script>
+        // PDF 파일 선택 처리
+        document.getElementById('pdfFile').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                document.getElementById('fileName').textContent = '선택된 파일: ' + file.name;
+            }
+        });
+
+        // 드래그 앤 드롭 처리
+        const uploadArea = document.querySelector('.upload-area');
+
+        uploadArea.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            this.style.borderColor = '#0d6efd';
+            this.style.backgroundColor = '#f0f8ff';
+        });
+
+        uploadArea.addEventListener('dragleave', function(e) {
+            e.preventDefault();
+            this.style.borderColor = '#dee2e6';
+            this.style.backgroundColor = '';
+        });
+
+        uploadArea.addEventListener('drop', function(e) {
+            e.preventDefault();
+            this.style.borderColor = '#dee2e6';
+            this.style.backgroundColor = '';
+
+            const file = e.dataTransfer.files[0];
+            if (file && file.type === 'application/pdf') {
+                document.getElementById('pdfFile').files = e.dataTransfer.files;
+                document.getElementById('fileName').textContent = '선택된 파일: ' + file.name;
+            } else {
+                Swal.fire({
+                    icon: 'warning',
+                    title: '잘못된 파일 형식',
+                    text: 'PDF 파일만 업로드 가능합니다.',
+                    confirmButtonText: '확인'
+                });
+            }
+        });
+
+        // 행 추가 함수
+        function addRow() {
+            const tableBody = document.getElementById('pdfTable');
+            const newRow = document.createElement('tr');
+            newRow.innerHTML = `
+                <td><input type="number" class="form-control form-control-sm" placeholder="페이지 입력" min="1"></td>
+                <td><input type="number" class="form-control form-control-sm" placeholder="페이지 입력" min="1"></td>
+                <td><input type="text" class="form-control form-control-sm" placeholder="파일명 입력"></td>
+                <td class="text-center">
+                    <button class="btn btn-danger btn-sm btn-remove" onclick="removeRow(this)">삭제</button>
+                </td>
+            `;
+            tableBody.appendChild(newRow);
+        }
+
+        // 행 제거 함수
+        function removeRow(button) {
+            const row = button.closest('tr');
+            const tableBody = document.getElementById('pdfTable');
+
+            // 최소 1개 행은 유지
+            if (tableBody.children.length > 1) {
+                row.remove();
+            } else {
+                Swal.fire({
+                    icon: 'info',
+                    title: '삭제 불가',
+                    text: '최소 1개의 행은 필요합니다.',
+                    confirmButtonText: '확인'
+                });
+            }
+        }
+
+        // 로딩 표시 함수
+        function showLoading(text = '잠시만 기다려주세요') {
+            const overlay = document.getElementById('loadingOverlay');
+            const subtext = document.getElementById('loadingSubtext');
+            subtext.textContent = text;
+            overlay.classList.add('active');
+        }
+
+        function hideLoading() {
+            const overlay = document.getElementById('loadingOverlay');
+            overlay.classList.remove('active');
+        }
+
+        // PDF 다운로드 함수
+        async function downloadPDFs() {
+            const pdfFile = document.getElementById('pdfFile').files[0];
+            if (!pdfFile) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'PDF 파일 없음',
+                    text: 'PDF 파일을 먼저 업로드해주세요.',
+                    confirmButtonText: '확인'
+                });
+                return;
+            }
+
+            const tableBody = document.getElementById('pdfTable');
+            const rows = tableBody.querySelectorAll('tr');
+            const splitData = [];
+
+            // 데이터 검증
+            for (let row of rows) {
+                const inputs = row.querySelectorAll('input');
+                const startPage = inputs[0].value;
+                const endPage = inputs[1].value;
+                const fileName = inputs[2].value;
+
+                if (!startPage || !endPage || !fileName) {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: '입력 누락',
+                        text: '모든 필드를 입력해주세요.',
+                        confirmButtonText: '확인'
+                    });
+                    return;
+                }
+
+                if (parseInt(startPage) > parseInt(endPage)) {
+                    Swal.fire({
+                        icon: 'error',
+                        title: '잘못된 페이지 범위',
+                        text: '시작 페이지가 끝 페이지보다 클 수 없습니다.',
+                        confirmButtonText: '확인'
+                    });
+                    return;
+                }
+
+                splitData.push({
+                    startPage: parseInt(startPage),
+                    endPage: parseInt(endPage),
+                    fileName: fileName
+                });
+            }
+
+            try {
+                showLoading('PDF 파일을 읽는 중...');
+
+                // PDF 파일을 ArrayBuffer로 읽기
+                const arrayBuffer = await pdfFile.arrayBuffer();
+
+                showLoading('PDF 문서를 로드하는 중...');
+                const pdfDoc = await PDFLib.PDFDocument.load(arrayBuffer);
+                const totalPages = pdfDoc.getPageCount();
+
+                // 페이지 범위 검증
+                for (let data of splitData) {
+                    if (data.startPage < 1 || data.endPage > totalPages) {
+                        hideLoading();
+                        Swal.fire({
+                            icon: 'error',
+                            title: '페이지 범위 오류',
+                            text: `페이지 범위가 유효하지 않습니다. 총 페이지 수: ${totalPages}`,
+                            confirmButtonText: '확인'
+                        });
+                        return;
+                    }
+                }
+
+                // ZIP 파일 생성
+                showLoading('ZIP 파일 생성 중...');
+                const zip = new JSZip();
+
+                // 각 분할 데이터에 대해 PDF 생성 후 ZIP에 추가
+                for (let i = 0; i < splitData.length; i++) {
+                    const data = splitData[i];
+                    showLoading(`PDF 생성 중... (${i + 1}/${splitData.length})`);
+
+                    // 새 PDF 문서 생성
+                    const newPdfDoc = await PDFLib.PDFDocument.create();
+
+                    // 지정된 페이지 범위를 복사
+                    const pageIndices = [];
+                    for (let p = data.startPage - 1; p < data.endPage; p++) {
+                        pageIndices.push(p);
+                    }
+
+                    const copiedPages = await newPdfDoc.copyPages(pdfDoc, pageIndices);
+                    copiedPages.forEach(page => newPdfDoc.addPage(page));
+
+                    // PDF 저장
+                    const pdfBytes = await newPdfDoc.save();
+
+                    // ZIP에 PDF 추가
+                    zip.file(data.fileName + '.pdf', pdfBytes);
+                }
+
+                // ZIP 파일 생성 및 다운로드
+                showLoading('압축 파일 다운로드 준비 중...');
+                const zipBlob = await zip.generateAsync({ type: 'blob' });
+
+                const url = URL.createObjectURL(zipBlob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = 'PDF_분할파일.zip';
+                link.click();
+
+                // 메모리 해제
+                URL.revokeObjectURL(url);
+
+                hideLoading();
+                Swal.fire({
+                    icon: 'success',
+                    title: '다운로드 완료!',
+                    text: `총 ${splitData.length}개의 PDF 파일이 압축되어 다운로드되었습니다.`,
+                    confirmButtonText: '확인'
+                });
+
+            } catch (error) {
+                hideLoading();
+                console.error('PDF 처리 중 오류:', error);
+                Swal.fire({
+                    icon: 'error',
+                    title: '처리 오류',
+                    text: 'PDF 처리 중 오류가 발생했습니다: ' + error.message,
+                    confirmButtonText: '확인'
+                });
+            }
+        }
+    </script>
+</body>
+</html>
