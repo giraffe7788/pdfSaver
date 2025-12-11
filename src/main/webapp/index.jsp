@@ -10,6 +10,7 @@
     <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <style>
         body {
             background-color: #f8f9fa;
@@ -124,6 +125,36 @@
             color: #ddd;
             margin-top: 10px;
         }
+        /* PDF 미리보기 */
+        .pdf-preview {
+            display: none;
+            width: 100%;
+            max-height: 85vh;
+            overflow-y: auto;
+            padding: 10px;
+        }
+        .pdf-preview.active {
+            display: block;
+        }
+        .pdf-page-container {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .pdf-page-canvas {
+            max-width: 100%;
+            border: 1px solid #dee2e6;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            background-color: white;
+        }
+        .pdf-page-number {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #6c757d;
+            font-weight: 500;
+        }
+        .upload-area.hidden {
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -132,14 +163,17 @@
             <!-- 왼쪽 -->
             <div class="col-md-5">
                 <div class="left-panel">
-                    <h3 class="mb-4">PDF 파일 업로드</h3>
-                    <div class="upload-area" onclick="document.getElementById('pdfFile').click()">
+                    <h3 class="mb-4" id="leftPanelTitle">PDF 파일 업로드</h3>
+                    <div class="upload-area" id="uploadArea" onclick="document.getElementById('pdfFile').click()">
                         <div class="upload-icon">📄</div>
                         <h5>클릭하여 PDF 파일을 선택하세요</h5>
                         <p class="text-muted">또는 파일을 여기로 드래그하세요</p>
                         <input type="file" id="pdfFile" accept="application/pdf" style="display: none;">
                     </div>
                     <div id="fileName"></div>
+                    <div id="pdfPreview" class="pdf-preview">
+                        <!-- PDF 렌더링 위치 -->
+                    </div>
                 </div>
             </div>
 
@@ -195,11 +229,87 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
     <script>
+        // PDF.js worker 설정
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        // PDF 미리보기 렌더링 함수
+        async function renderPDFPreview(file) {
+            const uploadArea = document.getElementById('uploadArea');
+            const pdfPreview = document.getElementById('pdfPreview');
+            const leftPanelTitle = document.getElementById('leftPanelTitle');
+
+            try {
+                showLoading('PDF 미리보기 생성 중...');
+
+                // PDF 로드
+                const arrayBuffer = await file.arrayBuffer();
+                const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
+                const numPages = pdf.numPages;
+
+                // 미리보기 영역 초기화
+                pdfPreview.innerHTML = '';
+
+                // 모든 페이지 렌더링
+                for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+                    const page = await pdf.getPage(pageNum);
+
+                    // 캔버스 생성
+                    const canvas = document.createElement('canvas');
+                    const context = canvas.getContext('2d');
+
+                    // 뷰포트 설정 (적절한 크기로 조정)
+                    const viewport = page.getViewport({scale: 1.5});
+                    canvas.width = viewport.width;
+                    canvas.height = viewport.height;
+
+                    // 페이지 렌더링
+                    await page.render({
+                        canvasContext: context,
+                        viewport: viewport
+                    }).promise;
+
+                    // 페이지 컨테이너 생성
+                    const pageContainer = document.createElement('div');
+                    pageContainer.className = 'pdf-page-container';
+
+                    // 캔버스에 클래스 추가
+                    canvas.className = 'pdf-page-canvas';
+
+                    // 페이지 번호 표시
+                    const pageNumber = document.createElement('div');
+                    pageNumber.className = 'pdf-page-number';
+                    pageNumber.textContent = `페이지 ${pageNum} / ${numPages}`;
+
+                    // 컨테이너에 추가
+                    pageContainer.appendChild(canvas);
+                    pageContainer.appendChild(pageNumber);
+                    pdfPreview.appendChild(pageContainer);
+                }
+
+                // UI 전환
+                uploadArea.classList.add('hidden');
+                pdfPreview.classList.add('active');
+                leftPanelTitle.textContent = 'PDF 미리보기';
+
+                hideLoading();
+            } catch (error) {
+                hideLoading();
+                console.error('PDF 미리보기 생성 오류:', error);
+                Swal.fire({
+                    icon: 'error',
+                    title: '미리보기 오류',
+                    text: 'PDF 미리보기 생성 중 오류가 발생했습니다.',
+                    confirmButtonText: '확인'
+                });
+            }
+        }
+
         // PDF 파일 선택 처리
         document.getElementById('pdfFile').addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (file) {
                 document.getElementById('fileName').textContent = '선택된 파일: ' + file.name;
+                renderPDFPreview(file);
             }
         });
 
@@ -227,6 +337,7 @@
             if (file && file.type === 'application/pdf') {
                 document.getElementById('pdfFile').files = e.dataTransfer.files;
                 document.getElementById('fileName').textContent = '선택된 파일: ' + file.name;
+                renderPDFPreview(file);
             } else {
                 Swal.fire({
                     icon: 'warning',

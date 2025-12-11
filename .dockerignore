@@ -1,0 +1,20 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.idea
+*.iml
+.vscode
+
+# Maven
+target/classes
+target/test-classes
+target/maven-status
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
