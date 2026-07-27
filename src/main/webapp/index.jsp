@@ -186,17 +186,17 @@
                         <table class="table table-bordered table-hover">
                             <thead class="table-light">
                                 <tr>
+                                    
                                     <th style="width: 15%;">시작 페이지</th>
                                     <th style="width: 15%;">끝 페이지</th>
-                                    <th style="width: 55%;">파일 제목</th>
                                     <th style="width: 15%;">행삭제</th>
                                 </tr>
                             </thead>
                             <tbody id="pdfTable">
                                 <tr>
-                                    <td><input type="number" class="form-control form-control-sm" placeholder="페이지 입력" min="1"></td>
-                                    <td><input type="number" class="form-control form-control-sm" placeholder="페이지 입력" min="1"></td>
                                     <td><input type="text" class="form-control form-control-sm" placeholder="파일명 입력"></td>
+                                    <td><input type="number" class="form-control form-control-sm" placeholder="페이지 입력" min="1"></td>
+                                    <td><input type="number" class="form-control form-control-sm" placeholder="페이지 입력" min="1"></td>
                                     <td class="text-center">
                                         <button class="btn btn-danger btn-sm btn-remove" onclick="removeRow(this)">삭제</button>
                                     </td>
@@ -414,9 +414,10 @@
             // 데이터 검증
             for (let row of rows) {
                 const inputs = row.querySelectorAll('input');
-                const startPage = inputs[0].value;
-                const endPage = inputs[1].value;
-                const fileName = inputs[2].value;
+                const fileName = inputs[0].value;
+                const startPage = inputs[1].value;
+                const endPage = inputs[2].value;
+                
 
                 if (!startPage || !endPage || !fileName) {
                     Swal.fire({
